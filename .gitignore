@@ -8,3 +8,8 @@ node_modules/
 /playwright/.auth/
 /allure-results/
 /allure-report/
+/allure-results-db/
+/allure-report-db/
+/.docker/postgres-data/
+
+.env

@@ -1,5 +1,12 @@
 /// <reference types="node" />
+import { loadEnvFile } from 'node:process';
 import { defineConfig, devices } from '@playwright/test';
+
+try {
+  loadEnvFile('.env');
+} catch {
+  // Optional: allow running even when .env is absent.
+}
 
 export default defineConfig({
   testDir: './tests',
@@ -11,6 +18,12 @@ export default defineConfig({
     ['line'],
     ['html', { open: 'never' }],
     ['allure-playwright', { resultsDir: 'allure-results' }],
+    [
+      './reporters/db-reporter.ts',
+      {
+        connectionString: process.env.PW_DB_URL,
+      },
+    ],
   ],
   timeout: 45_000,
   expect: {

@@ -5,12 +5,25 @@
   "main": "index.js",
   "scripts": {
     "test": "playwright test",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f postgres",
+    "db:init": "node scripts/db-init.cjs",
     "test:monitoring": "playwright test tests/homepage.monitor.spec.ts tests/critical-paths.monitor.spec.ts --project=chromium-core",
+    "test:monitoring:db": "playwright test tests/homepage.monitor.spec.ts tests/critical-paths.monitor.spec.ts --project=chromium-core",
     "test:monitoring:smoke": "playwright test tests/homepage.monitor.spec.ts --project=chromium-core",
     "test:monitoring:crossbrowser": "playwright test tests/homepage.monitor.spec.ts tests/critical-paths.monitor.spec.ts --project=chromium-crossbrowser --project=firefox-crossbrowser --project=webkit-crossbrowser",
     "test:monitoring:allure": "pnpm run test:monitoring",
     "test:headed": "playwright test --headed",
     "report": "playwright show-report",
+    "allure:from-db": "node scripts/allure-from-db.cjs",
+    "allure:from-db:latest": "node scripts/allure-from-db.cjs --latest",
+    "allure:from-db:all": "node scripts/allure-from-db.cjs --all-runs",
+    "allure:db": "pnpm run allure:from-db && pnpm run allure:generate:db",
+    "allure:db:all": "pnpm run allure:from-db:all && pnpm run allure:generate:db",
+    "allure:generate:db": "node scripts/allure.cjs generate ./allure-results-db -o ./allure-report-db --clean",
+    "allure:open:db": "node scripts/allure.cjs open ./allure-report-db",
+    "allure:serve:db": "node scripts/allure.cjs serve ./allure-results-db",
     "allure:generate": "node scripts/allure.cjs generate ./allure-results -o ./allure-report --clean",
     "allure:open": "node scripts/allure.cjs open ./allure-report",
     "allure:serve": "node scripts/allure.cjs serve ./allure-results"
@@ -21,8 +34,10 @@
   "packageManager": "pnpm@10.29.2",
   "devDependencies": {
     "@playwright/test": "^1.60.0",
+    "@types/pg": "^8.15.6",
     "@types/node": "^25.7.0",
     "allure-commandline": "^2.40.0",
-    "allure-playwright": "^3.8.0"
+    "allure-playwright": "^3.8.0",
+    "pg": "^8.16.3"
   }
 }

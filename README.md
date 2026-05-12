@@ -245,3 +245,90 @@ Each failure notification must include:
 - This plan is tracked at repository root `README.md`.
 - Default deployment model is Docker Compose on VPS/EC2.
 - GitHub Actions is restricted to CI/deployment support (build/push/trigger), not runtime scheduling.
+
+## Playwright DB Persistence (Local)
+
+This repository now includes a custom Playwright reporter that persists run/test data to PostgreSQL.
+
+### Local Docker PostgreSQL (Bind Mount)
+
+- Compose file: `docker-compose.yml`
+- Container: `playwright-poc-postgres`
+- Port: `5432`
+- Bind mount (host path): `./.docker/postgres-data:/var/lib/postgresql/data`
+
+Use bind mount data directory to keep PostgreSQL data across container recreation on the same machine.
+
+### Environment Variables
+
+- `PW_DB_ENABLED=true|false` (default: `false`)
+- `PW_DB_URL=postgres://user:pass@host:5432/db`
+- `PW_DB_REPORTER_STRICT=true|false` (default: `false`)
+- `PW_RUN_ENV=local|staging|prod` (reserved for dashboards/alerts)
+- Optional CI metadata:
+  - `CI`
+  - `GITHUB_SHA`
+  - `GITHUB_REF_NAME`
+  - `GITHUB_RUN_ID`
+  - `GITHUB_SERVER_URL`
+  - `GITHUB_REPOSITORY`
+
+### Commands
+
+These scripts now auto-load variables from repository `.env`.
+
+1. Start PostgreSQL:
+   - `pnpm run db:up`
+2. Initialize schema:
+   - `pnpm run db:init`
+3. Run monitoring tests with DB persistence:
+   - `pnpm run test:monitoring:db`
+4. Tail database logs:
+   - `pnpm run db:logs`
+5. Stop stack:
+   - `pnpm run db:down`
+
+### SQL Contract
+
+- Migration: `scripts/sql/001_init.sql`
+- Tables:
+  - `test_runs`
+  - `test_results`
+- Reporter:
+  - `reporters/db-reporter.ts`
+
+### Build Allure Report From PostgreSQL
+
+Allure itself does not query PostgreSQL directly. Instead, use the DB export bridge to create Allure-compatible result files, then generate/open report from that exported directory.
+Exporter behavior: each DB execution is emitted as a separate Allure test case (timestamp-separated), even for repeated successful runs.
+
+1. Export latest DB run into Allure result JSON files:
+   - `pnpm run allure:from-db:latest`
+2. Export all DB runs:
+   - `pnpm run allure:from-db` (default)
+3. Generate report from DB-exported results:
+   - `pnpm run allure:generate:db`
+4. Open DB-based report:
+   - `pnpm run allure:open:db`
+5. One-step latest-run export + generate:
+   - `pnpm run allure:from-db:latest && pnpm run allure:generate:db`
+
+Output directories:
+- DB-exported results: `allure-results-db/`
+- DB-based report: `allure-report-db/`
+
+### Quick Verification Queries
+
+```sql
+SELECT id, status, started_at, finished_at, total, passed, failed, skipped, timed_out, flaky
+FROM test_runs
+ORDER BY started_at DESC
+LIMIT 5;
+```
+
+```sql
+SELECT run_id, project, file, title, status, duration_ms, retry
+FROM test_results
+ORDER BY finished_at DESC
+LIMIT 20;
+```
