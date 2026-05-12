@@ -8,8 +8,12 @@
     "test:monitoring": "playwright test tests/homepage.monitor.spec.ts tests/critical-paths.monitor.spec.ts --project=chromium-core",
     "test:monitoring:smoke": "playwright test tests/homepage.monitor.spec.ts --project=chromium-core",
     "test:monitoring:crossbrowser": "playwright test tests/homepage.monitor.spec.ts tests/critical-paths.monitor.spec.ts --project=chromium-crossbrowser --project=firefox-crossbrowser --project=webkit-crossbrowser",
+    "test:monitoring:allure": "pnpm run test:monitoring",
     "test:headed": "playwright test --headed",
-    "report": "playwright show-report"
+    "report": "playwright show-report",
+    "allure:generate": "node scripts/allure.cjs generate ./allure-results -o ./allure-report --clean",
+    "allure:open": "node scripts/allure.cjs open ./allure-report",
+    "allure:serve": "node scripts/allure.cjs serve ./allure-results"
   },
   "keywords": [],
   "author": "",
@@ -17,6 +21,8 @@
   "packageManager": "pnpm@10.29.2",
   "devDependencies": {
     "@playwright/test": "^1.60.0",
-    "@types/node": "^25.7.0"
+    "@types/node": "^25.7.0",
+    "allure-commandline": "^2.40.0",
+    "allure-playwright": "^3.8.0"
   }
 }
