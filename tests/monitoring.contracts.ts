@@ -147,12 +147,12 @@ export const PAGE_ELEMENT_CONTRACTS: PageElementContract[] = [
     ],
     forbiddenTextPatterns: [/404/i, /Page not found/i],
   },
-  ...PROGRAM_AND_CERTIFICATION_PATHS.map((path) => ({
+  ...PROGRAM_AND_CERTIFICATION_PATHS.map<PageElementContract>((path) => ({
     path,
     requiredLocators: DEFAULT_REQUIRED_LOCATORS,
     forbiddenTextPatterns: [/404/i, /Page not found/i],
   })),
-  ...ADMISSIONS_PATHS.map((path) => ({
+  ...ADMISSIONS_PATHS.map<PageElementContract>((path) => ({
     path,
     requiredLocators: [
       { kind: 'role', role: 'heading' },
@@ -160,7 +160,7 @@ export const PAGE_ELEMENT_CONTRACTS: PageElementContract[] = [
     ],
     forbiddenTextPatterns: [/404/i, /Page not found/i],
   })),
-  ...FINANCE_PATHS.map((path) => ({
+  ...FINANCE_PATHS.map<PageElementContract>((path) => ({
     path,
     requiredLocators: [
       { kind: 'role', role: 'heading' },
