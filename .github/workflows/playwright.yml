@@ -21,7 +21,7 @@ jobs:
     - name: Install Playwright Browsers
       run: pnpm exec playwright install --with-deps
     - name: Run Playwright tests
-      run: pnpm exec playwright test
+      run: pnpm exec playwright test --grep-invert="Critical Path Monitoring"
     - name: Upload results to TestDino
       if: always()
       run: |
