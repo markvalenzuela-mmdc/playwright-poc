@@ -1,24 +1,110 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
-test.describe('Step 1 — Student\'s Information', () => {
+async function fillStep1(page: Page) {
+  await page.locator('#email').fill('test@example.com');
+  await page.locator('#termApplied').selectOption('August 2026 | First Term');
+  await page.locator('#programFocus').selectOption('BS Information Technology');
+  await page.locator('#programApplied').selectOption({ index: 1 });
+  await page.locator('#givenName').fill('Juan');
+  await page.locator('#familyName').fill('Dela Cruz');
+  await page.locator('#birthplace').fill('Manila');
+  await page.locator('#birthdate').fill('2000-01-15');
+  await page.locator('#gender').selectOption('Male');
+  await page.locator('#civilStatus').selectOption('Single');
+  await page.locator('#monthlyIncome').selectOption('25,000 - 49,999');
+  await page.locator('#mobile').fill('+63 912 345 6789');
+  await page.locator('#prefLearningHub').selectOption('Mapua University Makati');
+  await page.locator('#studentType').selectOption('Freshman');
+  await page.locator('#subStudentType').selectOption('Recent Grade 12 graduate');
+  await page.locator('#studentStatus').selectOption('Full-Time Student');
+  await page.locator('#religion').selectOption('Roman Catholic, including Catholic Charismatic');
+  await page.locator('#strand').selectOption('Science, Technology, Engineering and Mathematics (STEM)');
 
-  test('page loads with correct title and heading', async ({ page }) => {
+  await page.getByRole('combobox', { name: /last school/i }).click();
+  await page.waitForTimeout(1000);
+  await page.getByRole('combobox', { name: /last school/i }).fill('Mapua University');
+  await page.waitForTimeout(2000);
+  await page.keyboard.press('Enter');
+
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(1000);
+
+  await page.locator('#curraddrCountry').selectOption('Philippines');
+  await page.locator('#curraddrAddrline1').fill('123 Rizal St');
+  await page.locator('#curraddrAddrline2').fill('Barangay San Antonio');
+  await page.locator('#curraddrProvince').selectOption('NCR, National Capital Region');
+  await page.waitForTimeout(3000);
+  await page.locator('#curraddrCitymun').selectOption('Manila City');
+  await page.waitForTimeout(2000);
+
+  await page.evaluate(() => {
+    const addOpt = (id: string, val: string) =>
+      document.querySelector<HTMLSelectElement>('#' + id)?.add(new Option(val, val));
+    addOpt('curraddrBarangay', 'Barangay 1');
+    addOpt('permaddrBarangay', 'Barangay 2');
+  });
+  await page.locator('#curraddrBarangay').selectOption('Barangay 1');
+  await page.locator('#curraddrZipcode').fill('1000');
+
+  await page.locator('#permaddrCountry').selectOption('Philippines');
+  await page.locator('#permaddrAddrline1').fill('456 Mabini St');
+  await page.locator('#permaddrAddrline2').fill('Barangay Santa Cruz');
+  await page.locator('#permaddrProvince').selectOption('NCR, National Capital Region');
+  await page.waitForTimeout(3000);
+  await page.locator('#permaddrCitymun').selectOption('Manila City');
+  await page.waitForTimeout(2000);
+
+  await page.locator('#permaddrBarangay').selectOption('Barangay 2');
+  await page.locator('#permaddrZipcode').fill('1001');
+
+  await page.locator('#interestedForAScholarship').selectOption('No');
+  await page.locator('#withMedicalCondition').selectOption('No');
+}
+
+async function advanceToStep2(page: Page) {
+  await fillStep1(page);
+  await page.getByRole('button', { name: /next/i }).click();
+  await page.waitForTimeout(3000);
+
+  const dialog = page.getByRole('dialog');
+  const dialogVisible = await dialog.isVisible().catch(() => false);
+  const invalidFields = await page.evaluate(() =>
+    Array.from(document.querySelectorAll<HTMLElement>('.ng-invalid'))
+      .map(e => e.id || e.getAttribute('formcontrolname') || e.tagName.toLowerCase())
+      .join(', ')
+  );
+  expect(dialogVisible,
+    `dialog appeared — invalid fields: [${invalidFields}]`
+  ).toBe(false);
+  await expect(page.getByRole('button', { name: /parent.*guardian/i })).toBeEnabled({ timeout: 5000 });
+}
+
+test.describe.serial('Step 1 — Student\'s Information', () => {
+  let page: Page;
+
+  test.beforeAll(async ({ browser }) => {
+    page = await browser.newPage();
     await page.goto('/apply-now/bachelors-degree');
+  });
+
+  test.afterAll(async () => {
+    await page.close();
+  });
+
+  test('page loads with correct title and heading', async () => {
     await expect(page).toHaveTitle('MMDC EnrollMate');
     await expect(page.getByRole('heading', { name: /online application/i })).toBeVisible();
     await expect(page.getByRole('heading', { name: /applicant information/i })).toBeVisible();
   });
 
-  test('shows 4-step navigation with only step 1 active', async ({ page }) => {
-    await page.goto('/apply-now/bachelors-degree');
+  test('shows 4-step navigation with only step 1 active', async () => {
     await expect(page.getByRole('button', { name: /student.s? information/i })).toBeEnabled();
     await expect(page.getByRole('button', { name: /parent.*guardian/i })).toBeDisabled();
     await expect(page.getByRole('button', { name: /additional information/i })).toBeDisabled();
     await expect(page.getByRole('button', { name: /confirmation/i })).toBeDisabled();
   });
 
-  test('displays all required form fields', async ({ page }) => {
-    await page.goto('/apply-now/bachelors-degree');
+  test('displays all required form fields', async () => {
     await expect(page.getByRole('textbox', { name: '* Email' })).toBeVisible();
     await expect(page.locator('#termApplied')).toBeVisible();
     await expect(page.locator('#programFocus')).toBeVisible();
@@ -31,8 +117,28 @@ test.describe('Step 1 — Student\'s Information', () => {
     await expect(page.getByRole('textbox', { name: '* Mobile' })).toBeVisible();
   });
 
-  test('shows validation errors when submitting empty form', async ({ page }) => {
-    await page.goto('/apply-now/bachelors-degree');
+  test('major dropdown contains BS IT and BS BA', async () => {
+    await expect(page.locator('#programFocus')).toContainText('BS Information Technology');
+    await expect(page.locator('#programFocus')).toContainText('BS Business Administration');
+  });
+
+  test('term dropdown contains upcoming terms', async () => {
+    await expect(page.locator('#termApplied')).toContainText('August 2026 | First Term');
+    await expect(page.locator('#termApplied')).toContainText('December 2026 | Second Term');
+    await expect(page.locator('#termApplied')).toContainText('April 2027 | Third Term');
+  });
+
+  test('student type dropdown contains Freshman and Transferee', async () => {
+    await expect(page.locator('#studentType')).toContainText('Freshman');
+    await expect(page.locator('#studentType')).toContainText('Transferee');
+  });
+
+  test('has email contact link and NEXT button', async () => {
+    await expect(page.getByRole('link', { name: /admissions@mmdc/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /next/i })).toBeVisible();
+  });
+
+  test('shows validation errors when submitting empty form', async () => {
     await page.getByRole('button', { name: /next/i }).click();
     await page.waitForTimeout(1500);
 
@@ -41,98 +147,105 @@ test.describe('Step 1 — Student\'s Information', () => {
     expect(count).toBeGreaterThan(0);
   });
 
-  test('major dropdown contains BS IT and BS BA', async ({ page }) => {
-    await page.goto('/apply-now/bachelors-degree');
-    await expect(page.locator('#programFocus')).toContainText('BS Information Technology');
-    await expect(page.locator('#programFocus')).toContainText('BS Business Administration');
-  });
-
-  test('term dropdown contains upcoming terms', async ({ page }) => {
-    await page.goto('/apply-now/bachelors-degree');
-    await expect(page.locator('#termApplied')).toContainText('August 2026 | First Term');
-    await expect(page.locator('#termApplied')).toContainText('December 2026 | Second Term');
-    await expect(page.locator('#termApplied')).toContainText('April 2027 | Third Term');
-  });
-
-  test('student type dropdown contains Freshman and Transferee', async ({ page }) => {
-    await page.goto('/apply-now/bachelors-degree');
-    await expect(page.locator('#studentType')).toContainText('Freshman');
-    await expect(page.locator('#studentType')).toContainText('Transferee');
-  });
-
-  test('has email contact link and NEXT button', async ({ page }) => {
-    await page.goto('/apply-now/bachelors-degree');
-    await expect(page.getByRole('link', { name: /admissions@mmdc/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /next/i })).toBeVisible();
-  });
-});
-
-test.describe('Step 2 — Parent/Guardian\'s Information', () => {
-
-  test('navigates to step 2 when step 1 is fully filled', async ({ page }) => {
+  test('navigates to step 2 when step 1 is fully filled', async () => {
     test.setTimeout(120_000);
     await page.goto('/apply-now/bachelors-degree', { waitUntil: 'networkidle' });
     await page.waitForSelector('#email', { timeout: 10000 });
+    await advanceToStep2(page);
+  });
+});
 
-    await page.locator('#email').fill('test@example.com');
-    await page.locator('#termApplied').selectOption('August 2026 | First Term');
-    await page.locator('#programFocus').selectOption('BS Information Technology');
-    await page.locator('#programApplied').selectOption({ index: 1 });
-    await page.locator('#givenName').fill('Juan');
-    await page.locator('#familyName').fill('Dela Cruz');
-    await page.locator('#birthplace').fill('Manila');
-    await page.locator('#birthdate').fill('2000-01-15');
-    await page.locator('#gender').selectOption('Male');
-    await page.locator('#civilStatus').selectOption('Single');
-    await page.locator('#monthlyIncome').selectOption('25,000 - 49,999');
-    await page.locator('#mobile').fill('+63 912 345 6789');
-    await page.locator('#prefLearningHub').selectOption('Mapua University Makati');
-    await page.locator('#studentType').selectOption('Freshman');
-    await page.locator('#subStudentType').selectOption('Recent Grade 12 graduate');
-    await page.locator('#studentStatus').selectOption('Full-Time Student');
-    await page.locator('#religion').selectOption('Roman Catholic, including Catholic Charismatic');
-    await page.locator('#strand').selectOption('Science, Technology, Engineering and Mathematics (STEM)');
+test.describe.serial('Step 2 — Parent/Guardian\'s Information', () => {
+  let page: Page;
 
-    await page.getByRole('combobox', { name: /last school/i }).click();
+  test.beforeAll(async ({ browser }) => {
+    test.setTimeout(120_000);
+    page = await browser.newPage();
+    await page.goto('/apply-now/bachelors-degree', { waitUntil: 'networkidle' });
+    await page.waitForSelector('#email', { timeout: 10000 });
+    await advanceToStep2(page);
+  });
+
+  test.afterAll(async () => {
+    await page.close();
+  });
+
+  test('shows step 2 heading and correct nav states', async () => {
+    await page.waitForTimeout(2000);
+    await expect(page.getByRole('heading', { name: /father information/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /mother information/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /guardian information/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /student.s? information/i })).toBeEnabled();
+    await expect(page.getByRole('button', { name: /parent.*guardian/i })).toBeEnabled();
+    await expect(page.getByRole('button', { name: /additional information/i })).toBeDisabled();
+    await expect(page.getByRole('button', { name: /confirmation/i })).toBeDisabled();
+  });
+
+  test('living status dropdowns contain Living, Deceased, Unknown', async () => {
+    for (const id of ['#fthrDeceased', '#mthrDeceased']) {
+      await expect(page.locator(id)).toContainText('Living');
+      await expect(page.locator(id)).toContainText('Deceased');
+      await expect(page.locator(id)).toContainText('Unknown');
+    }
+  });
+
+  test('guardian dropdown contains Others option', async () => {
+    await expect(page.locator('#guardian')).toContainText('Others');
+  });
+
+  test('guardian form expands when Others is selected', async () => {
+    await expect(page.locator('#grdnGivenName')).not.toBeVisible();
+
+    await page.locator('#guardian').selectOption('Others');
     await page.waitForTimeout(1000);
-    await page.getByRole('combobox', { name: /last school/i }).fill('Mapua University');
-    await page.waitForTimeout(2000);
-    await page.keyboard.press('Enter');
 
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await expect(page.locator('#grdnGivenName')).toBeVisible();
+    await expect(page.locator('#grdnFamilyName')).toBeVisible();
+    await expect(page.locator('#grdnBirthdate')).toBeVisible();
+    await expect(page.locator('#grdnMobile')).toBeVisible();
+    await expect(page.locator('#grdnEmail')).toBeVisible();
+    await expect(page.locator('#grdnOccupation')).toBeVisible();
+    await expect(page.locator('#grdnApplRelationship')).toBeVisible();
+  });
+
+  test('relationship dropdown contains expected options', async () => {
+    await page.locator('#guardian').selectOption('Others');
     await page.waitForTimeout(1000);
 
-    await page.locator('#curraddrCountry').selectOption('Philippines');
-    await page.locator('#curraddrAddrline1').fill('123 Rizal St');
-    await page.locator('#curraddrAddrline2').fill('Barangay San Antonio');
-    await page.locator('#curraddrProvince').selectOption('NCR, National Capital Region');
-    await page.waitForTimeout(3000);
-    await page.locator('#curraddrCitymun').selectOption('Manila City');
+    await expect(page.locator('#grdnApplRelationship')).toContainText('Grandparent');
+    await expect(page.locator('#grdnApplRelationship')).toContainText('Sibling');
+    await expect(page.locator('#grdnApplRelationship')).toContainText('Aunt');
+    await expect(page.locator('#grdnApplRelationship')).toContainText('Uncle');
+  });
+
+  test('suffix dropdown contains Jr, Sr, I-VIII', async () => {
+    await page.locator('#guardian').selectOption('Others');
+    await page.waitForTimeout(1000);
+
+    for (const suffix of ['Jr', 'Sr', 'I', 'II', 'III']) {
+      await expect(page.locator('#grdnSuffix')).toContainText(suffix);
+    }
+  });
+
+  test('fills step 2 and advances to step 3', async () => {
     await page.waitForTimeout(2000);
 
-    // create barangay options then use Playwright selectOption so Angular detects them
-    await page.evaluate(() => {
-      const addOpt = (id: string, val: string) =>
-        document.querySelector<HTMLSelectElement>('#' + id)?.add(new Option(val, val));
-      addOpt('curraddrBarangay', 'Barangay 1');
-      addOpt('permaddrBarangay', 'Barangay 2');
-    });
-    await page.locator('#curraddrBarangay').selectOption('Barangay 1');
-    await page.locator('#curraddrZipcode').fill('1000');
+    await page.locator('#fthrDeceased').selectOption('Deceased');
+    await page.locator('#mthrDeceased').selectOption('Deceased');
+    await page.locator('#guardian').selectOption('Others');
+    await page.waitForTimeout(1000);
 
-    await page.locator('#permaddrCountry').selectOption('Philippines');
-    await page.locator('#permaddrAddrline1').fill('456 Mabini St');
-    await page.locator('#permaddrAddrline2').fill('Barangay Santa Cruz');
-    await page.locator('#permaddrProvince').selectOption('NCR, National Capital Region');
-    await page.waitForTimeout(3000);
-    await page.locator('#permaddrCitymun').selectOption('Manila City');
-    await page.waitForTimeout(2000);
+    await page.locator('#grdnGivenName').fill('Maria');
+    await page.locator('#grdnFamilyName').fill('Santos');
+    await page.locator('#grdnBirthdate').fill('1975-05-20');
+    await page.locator('#grdnMobile').fill('+63 917 876 5432');
+    await page.locator('#grdnEmail').fill('maria.santos@example.com');
+    await page.locator('#grdnOccupation').fill('Teacher');
+    await page.locator('#grdnApplRelationship').selectOption('Grandparent');
 
-    await page.locator('#permaddrBarangay').selectOption('Barangay 2');
-    await page.locator('#permaddrZipcode').fill('1001');
-
-    await page.locator('#interestedForAScholarship').selectOption('No');
-    await page.locator('#withMedicalCondition').selectOption('No');
+    await page.locator('#copyGuardianAddressCheckbox').check();
+    await page.locator('#copyPermaGuardianAddressCheckbox').check();
+    await page.waitForTimeout(1000);
 
     await page.getByRole('button', { name: /next/i }).click();
     await page.waitForTimeout(3000);
@@ -147,7 +260,7 @@ test.describe('Step 2 — Parent/Guardian\'s Information', () => {
     expect(dialogVisible,
       `dialog appeared — invalid fields: [${invalidFields}]`
     ).toBe(false);
-    await expect(page.getByRole('button', { name: /parent.*guardian/i })).toBeEnabled({ timeout: 5000 });
+    await expect(page.getByRole('button', { name: /additional information/i })).toBeEnabled({ timeout: 5000 });
   });
 });
 
