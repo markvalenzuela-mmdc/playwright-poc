@@ -7,6 +7,9 @@ import type {
   TestCase,
   TestResult,
 } from '@playwright/test/reporter';
+import { eq } from 'drizzle-orm';
+import { createDbConnection, type DbConnection } from '../db/client';
+import { testResults, testRuns } from '../db/schema';
 
 type Counters = {
   total: number;
@@ -21,12 +24,6 @@ type ReporterOptions = {
   enabled?: boolean;
   strict?: boolean;
   connectionString?: string;
-};
-
-type DbClient = {
-  connect(): Promise<unknown>;
-  query(text: string, values?: unknown[]): Promise<unknown>;
-  end(): Promise<void>;
 };
 
 function asBoolean(value: string | undefined, defaultValue: boolean): boolean {
@@ -73,7 +70,7 @@ export default class DbReporter implements Reporter {
   private readonly errors: Error[] = [];
   private runId: string = randomUUID();
   private runStartedAt: Date = new Date();
-  private client: DbClient | null = null;
+  private connection: DbConnection | null = null;
   private baseUrl: string | null = null;
   private rootSuite: Suite | null = null;
   private projectToBrowser = new Map<string, string | null>();
@@ -81,7 +78,7 @@ export default class DbReporter implements Reporter {
   constructor(options: ReporterOptions = {}) {
     this.enabled = options.enabled ?? asBoolean(process.env.PW_DB_ENABLED, false);
     this.strict = options.strict ?? asBoolean(process.env.PW_DB_REPORTER_STRICT, false);
-    this.connectionString = options.connectionString ?? process.env.PW_DB_URL ?? '';
+    this.connectionString = options.connectionString ?? process.env.DATABASE_URL ?? '';
   }
 
   private addError(message: string, cause?: unknown) {
@@ -166,36 +163,25 @@ export default class DbReporter implements Reporter {
 
     if (!this.enabled) return;
     if (!this.connectionString) {
-      this.addError('PW_DB_ENABLED=true but PW_DB_URL is missing');
+      this.addError('PW_DB_ENABLED=true but DATABASE_URL is missing');
       return;
     }
 
     try {
-      const pg = await import('pg');
-      const PgClient = pg.Client;
-      this.client = new PgClient({ connectionString: this.connectionString });
-      await this.client.connect();
+      this.connection = createDbConnection(this.connectionString);
 
-      await this.client.query(
-        `
-          INSERT INTO test_runs (
-            id, started_at, status, total, passed, failed, skipped, timed_out, flaky,
-            ci, run_env, branch, commit_sha, build_url, triggered_by, base_url
-          ) VALUES ($1, $2, $3, 0, 0, 0, 0, 0, 0, $4, $5, $6, $7, $8, $9, $10)
-        `,
-        [
-          this.runId,
-          this.runStartedAt,
-          'running',
-          asBoolean(process.env.CI, false),
-          process.env.PW_RUN_ENV ?? null,
-          process.env.GITHUB_REF_NAME ?? process.env.BRANCH_NAME ?? null,
-          process.env.GITHUB_SHA ?? process.env.COMMIT_SHA ?? null,
-          resolveBuildUrl(),
-          process.env.GITHUB_ACTOR ?? process.env.USERNAME ?? process.env.USER ?? null,
-          this.baseUrl,
-        ]
-      );
+      await this.connection.db.insert(testRuns).values({
+        id: this.runId,
+        startedAt: this.runStartedAt,
+        status: 'running',
+        ci: asBoolean(process.env.CI, false),
+        runEnv: process.env.PW_RUN_ENV ?? null,
+        branch: process.env.GITHUB_REF_NAME ?? process.env.BRANCH_NAME ?? null,
+        commitSha: process.env.GITHUB_SHA ?? process.env.COMMIT_SHA ?? null,
+        buildUrl: resolveBuildUrl(),
+        triggeredBy: process.env.GITHUB_ACTOR ?? process.env.USERNAME ?? process.env.USER ?? null,
+        baseUrl: this.baseUrl,
+      });
     } catch (error) {
       this.addError('Failed to initialize db reporter', error);
     }
@@ -206,7 +192,7 @@ export default class DbReporter implements Reporter {
   }
 
   async onTestEnd(test: TestCase, result: TestResult): Promise<void> {
-    if (!this.enabled || !this.client) {
+    if (!this.enabled || !this.connection) {
       this.startTimesByAttempt.delete(this.attemptKey(test, result));
       return;
     }
@@ -223,42 +209,27 @@ export default class DbReporter implements Reporter {
     const tags = ((test as unknown as { tags?: string[] }).tags ?? []).map((tag) => tag.toString());
 
     try {
-      await this.client.query(
-        `
-          INSERT INTO test_results (
-            id, run_id, project, file, title, full_title, tags,
-            status, expected_status, duration_ms, retry, browser,
-            error_message, error_stack, trace_path, video_path, screenshot_path,
-            started_at, finished_at
-          ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7,
-            $8, $9, $10, $11, $12,
-            $13, $14, $15, $16, $17,
-            $18, $19
-          )
-        `,
-        [
-          randomUUID(),
-          this.runId,
-          projectName,
-          test.location.file,
-          test.title,
-          test.titlePath().join(' > '),
-          tags,
-          normalizeStatus(result.status),
-          normalizeStatus(test.expectedStatus),
-          result.duration,
-          result.retry,
-          browserName,
-          result.error?.message ?? null,
-          result.error?.stack ?? null,
-          tracePath,
-          videoPath,
-          screenshotPath,
-          startedAt,
-          finishedAt,
-        ]
-      );
+      await this.connection.db.insert(testResults).values({
+        id: randomUUID(),
+        runId: this.runId,
+        project: projectName,
+        file: test.location.file,
+        title: test.title,
+        fullTitle: test.titlePath().join(' > '),
+        tags,
+        status: normalizeStatus(result.status),
+        expectedStatus: normalizeStatus(test.expectedStatus),
+        durationMs: result.duration,
+        retry: result.retry,
+        browser: browserName,
+        errorMessage: result.error?.message ?? null,
+        errorStack: result.error?.stack ?? null,
+        tracePath,
+        videoPath,
+        screenshotPath,
+        startedAt,
+        finishedAt,
+      });
     } catch (error) {
       this.addError(`Failed to persist test result for "${test.title}"`, error);
     } finally {
@@ -275,46 +246,33 @@ export default class DbReporter implements Reporter {
     this.counters.timedOut = finalCounters.timedOut;
     this.counters.flaky = finalCounters.flaky;
 
-    if (this.enabled && this.client) {
+    if (this.enabled && this.connection) {
       try {
-        await this.client.query(
-          `
-            UPDATE test_runs
-            SET
-              finished_at = $2,
-              status = $3,
-              total = $4,
-              passed = $5,
-              failed = $6,
-              skipped = $7,
-              timed_out = $8,
-              flaky = $9
-            WHERE id = $1
-          `,
-          [
-            this.runId,
-            new Date(),
-            result.status,
-            this.counters.total,
-            this.counters.passed,
-            this.counters.failed,
-            this.counters.skipped,
-            this.counters.timedOut,
-            this.counters.flaky,
-          ]
-        );
+        await this.connection.db
+          .update(testRuns)
+          .set({
+            finishedAt: new Date(),
+            status: result.status,
+            total: this.counters.total,
+            passed: this.counters.passed,
+            failed: this.counters.failed,
+            skipped: this.counters.skipped,
+            timedOut: this.counters.timedOut,
+            flaky: this.counters.flaky,
+          })
+          .where(eq(testRuns.id, this.runId));
       } catch (error) {
         this.addError('Failed to finalize test run row', error);
       }
     }
 
-    if (this.client) {
+    if (this.connection) {
       try {
-        await this.client.end();
+        await this.connection.close();
       } catch (error) {
         this.addError('Failed to close database client', error);
       } finally {
-        this.client = null;
+        this.connection = null;
       }
     }
 

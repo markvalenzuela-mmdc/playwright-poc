@@ -21,7 +21,7 @@ export default defineConfig({
     [
       './reporters/db-reporter.ts',
       {
-        connectionString: process.env.PW_DB_URL,
+        connectionString: process.env.DATABASE_URL,
       },
     ],
   ],

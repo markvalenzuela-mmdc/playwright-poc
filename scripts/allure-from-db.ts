@@ -1,18 +1,20 @@
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-const { randomUUID } = require('crypto');
-const { loadEnvFile } = require('node:process');
-const { Client } = require('pg');
+import fs from 'node:fs';
+import path from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
+import { asc, desc, eq, inArray } from 'drizzle-orm';
+import { createDbConnection } from '../db/client';
+import { testResults, testRuns } from '../db/schema';
 
-try {
-  loadEnvFile('.env');
-} catch {
-  // Optional: allow manual env-only execution.
-}
+type Args = {
+  outputDir: string;
+  clean: boolean;
+  allRuns: boolean;
+  runId: string | null;
+  limitRuns: number;
+};
 
-function parseArgs(argv) {
-  const parsed = {
+function parseArgs(argv: string[]): Args {
+  const parsed: Args = {
     outputDir: path.join(process.cwd(), 'allure-results-db'),
     clean: true,
     allRuns: true,
@@ -54,16 +56,16 @@ function parseArgs(argv) {
   return parsed;
 }
 
-function hashId(value) {
-  return crypto.createHash('md5').update(value).digest('hex');
+function hashId(value: string): string {
+  return createHash('md5').update(value).digest('hex');
 }
 
-function toMs(value) {
+function toMs(value: Date | string | null): number {
   if (!value) return Date.now();
   return new Date(value).getTime();
 }
 
-function toAllureStatus(status) {
+function toAllureStatus(status: string): string {
   if (status === 'passed') return 'passed';
   if (status === 'skipped') return 'skipped';
   if (status === 'failed') return 'failed';
@@ -72,11 +74,11 @@ function toAllureStatus(status) {
   return 'unknown';
 }
 
-function toLabel(name, value) {
+function toLabel(name: string, value: unknown) {
   return { name, value: String(value) };
 }
 
-function cleanAndCreateDirectory(dirPath) {
+function cleanAndCreateDirectory(dirPath: string) {
   fs.mkdirSync(dirPath, { recursive: true });
   for (const entry of fs.readdirSync(dirPath)) {
     const target = path.join(dirPath, entry);
@@ -86,12 +88,12 @@ function cleanAndCreateDirectory(dirPath) {
   }
 }
 
-function normalizeTags(tagsValue) {
+function normalizeTags(tagsValue: unknown): string[] {
   if (!Array.isArray(tagsValue)) return [];
   return tagsValue.map((tag) => String(tag).replace(/^@/, ''));
 }
 
-function deriveSuiteParts(fullTitle, filePath) {
+function deriveSuiteParts(fullTitle: string, filePath: string | null) {
   const parts = String(fullTitle)
     .split(' > ')
     .map((piece) => piece.trim())
@@ -103,45 +105,31 @@ function deriveSuiteParts(fullTitle, filePath) {
   return { fileName, subSuite };
 }
 
-async function resolveRunIds(client, args) {
+async function resolveRunIds(db: ReturnType<typeof createDbConnection>['db'], args: Args) {
   if (args.runId) return [args.runId];
 
   if (args.allRuns) {
-    const { rows } = await client.query(
-      `
-        SELECT id
-        FROM test_runs
-        ORDER BY started_at DESC
-      `
-    );
+    const rows = await db
+      .select({ id: testRuns.id })
+      .from(testRuns)
+      .orderBy(desc(testRuns.startedAt));
     return rows.map((row) => row.id);
   }
 
-  const { rows } = await client.query(
-    `
-      SELECT id
-      FROM test_runs
-      ORDER BY started_at DESC
-      LIMIT $1
-    `,
-    [args.limitRuns]
-  );
+  const rows = await db
+    .select({ id: testRuns.id })
+    .from(testRuns)
+    .orderBy(desc(testRuns.startedAt))
+    .limit(args.limitRuns);
   return rows.map((row) => row.id);
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const connectionString =
-    process.env.PW_DB_URL ||
-    process.env.DATABASE_URL ||
-    'postgres://test:test@localhost:5432/playwright';
-
-  const client = new Client({ connectionString });
+  const connection = createDbConnection();
 
   try {
-    await client.connect();
-
-    const runIds = await resolveRunIds(client, args);
+    const runIds = await resolveRunIds(connection.db, args);
     if (runIds.length === 0) {
       console.log('No test runs found in database.');
       return;
@@ -150,51 +138,48 @@ async function main() {
     if (args.clean) cleanAndCreateDirectory(args.outputDir);
     else fs.mkdirSync(args.outputDir, { recursive: true });
 
-    const { rows } = await client.query(
-      `
-        SELECT
-          tr.id,
-          tr.run_id,
-          tr.project,
-          tr.file,
-          tr.title,
-          tr.full_title,
-          tr.tags,
-          tr.status,
-          tr.expected_status,
-          tr.duration_ms,
-          tr.retry,
-          tr.browser,
-          tr.error_message,
-          tr.error_stack,
-          tr.trace_path,
-          tr.video_path,
-          tr.screenshot_path,
-          tr.started_at,
-          tr.finished_at,
-          r.status AS run_status,
-          r.started_at AS run_started_at,
-          r.finished_at AS run_finished_at,
-          r.run_env
-        FROM test_results tr
-        JOIN test_runs r ON r.id = tr.run_id
-        WHERE tr.run_id = ANY($1::uuid[])
-        ORDER BY tr.finished_at ASC
-      `,
-      [runIds]
-    );
+    const rows = await connection.db
+      .select({
+        id: testResults.id,
+        runId: testResults.runId,
+        project: testResults.project,
+        file: testResults.file,
+        title: testResults.title,
+        fullTitle: testResults.fullTitle,
+        tags: testResults.tags,
+        status: testResults.status,
+        expectedStatus: testResults.expectedStatus,
+        durationMs: testResults.durationMs,
+        retry: testResults.retry,
+        browser: testResults.browser,
+        errorMessage: testResults.errorMessage,
+        errorStack: testResults.errorStack,
+        tracePath: testResults.tracePath,
+        videoPath: testResults.videoPath,
+        screenshotPath: testResults.screenshotPath,
+        startedAt: testResults.startedAt,
+        finishedAt: testResults.finishedAt,
+        runStatus: testRuns.status,
+        runStartedAt: testRuns.startedAt,
+        runFinishedAt: testRuns.finishedAt,
+        runEnv: testRuns.runEnv,
+      })
+      .from(testResults)
+      .innerJoin(testRuns, eq(testRuns.id, testResults.runId))
+      .where(inArray(testResults.runId, runIds))
+      .orderBy(asc(testResults.finishedAt));
 
     for (const row of rows) {
       const uuid = randomUUID();
-      const historySeed = `${row.id}|${row.run_id}|${row.started_at || ''}|${row.finished_at || ''}`;
+      const historySeed = `${row.id}|${row.runId}|${row.startedAt || ''}|${row.finishedAt || ''}`;
       const historyId = hashId(historySeed);
       const status = toAllureStatus(row.status);
-      const start = toMs(row.started_at);
-      const stop = toMs(row.finished_at) || start + (row.duration_ms || 0);
-      const { fileName, subSuite } = deriveSuiteParts(row.full_title, row.file);
+      const start = toMs(row.startedAt);
+      const stop = toMs(row.finishedAt) || start + (row.durationMs || 0);
+      const { fileName, subSuite } = deriveSuiteParts(row.fullTitle, row.file);
       const tags = normalizeTags(row.tags);
 
-      const startedAtIso = row.started_at ? new Date(row.started_at).toISOString() : 'unknown-time';
+      const startedAtIso = row.startedAt ? new Date(row.startedAt).toISOString() : 'unknown-time';
 
       const labels = [
         toLabel('language', 'javascript'),
@@ -203,7 +188,7 @@ async function main() {
         toLabel('parentSuite', row.project || 'unknown-project'),
         toLabel('suite', fileName || 'unknown-suite'),
         toLabel('host', process.env.COMPUTERNAME || 'db-import'),
-        toLabel('thread', `run-${row.run_id}`),
+        toLabel('thread', `run-${row.runId}`),
       ];
 
       if (subSuite) labels.push(toLabel('subSuite', subSuite));
@@ -211,28 +196,28 @@ async function main() {
 
       const parameters = [
         { name: 'Project', value: String(row.project || 'unknown') },
-        { name: 'Run ID', value: String(row.run_id) },
+        { name: 'Run ID', value: String(row.runId) },
         { name: 'Started At', value: startedAtIso },
         { name: 'Retry', value: String(row.retry || 0) },
       ];
 
       if (row.browser) parameters.push({ name: 'Browser', value: String(row.browser) });
-      if (row.run_env) parameters.push({ name: 'Environment', value: String(row.run_env) });
+      if (row.runEnv) parameters.push({ name: 'Environment', value: String(row.runEnv) });
 
-      const statusDetails = {};
-      if (row.error_message) statusDetails.message = String(row.error_message);
-      if (row.error_stack) statusDetails.trace = String(row.error_stack);
+      const statusDetails: { message?: string; trace?: string } = {};
+      if (row.errorMessage) statusDetails.message = String(row.errorMessage);
+      if (row.errorStack) statusDetails.trace = String(row.errorStack);
 
       const result = {
         uuid,
         historyId,
         testCaseId: historyId,
-        fullName: `${row.file || 'unknown-file'}::${row.full_title || row.title}::run=${row.run_id}::started=${startedAtIso}`,
+        fullName: `${row.file || 'unknown-file'}::${row.fullTitle || row.title}::run=${row.runId}::started=${startedAtIso}`,
         name: `${row.title} [${startedAtIso}]`,
         status,
         statusDetails,
         stage: 'finished',
-        description: `Imported from PostgreSQL run ${row.run_id}`,
+        description: `Imported from PostgreSQL run ${row.runId}`,
         steps: [],
         attachments: [],
         parameters,
@@ -258,7 +243,7 @@ async function main() {
       `Exported ${rows.length} test results from ${runIds.length} run(s) to ${args.outputDir}`
     );
   } finally {
-    await client.end().catch(() => {});
+    await connection.close().catch(() => undefined);
   }
 }
 
