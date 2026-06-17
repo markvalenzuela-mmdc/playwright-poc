@@ -19,10 +19,8 @@ services:
   report-ui:
     image: nginx:alpine
     restart: unless-stopped
-    ports:
-      - "8080:80"
-    # expose:
-    #   - "80"
+    expose:
+      - "80"
     volumes:
       - allure-report-db:/usr/share/nginx/html:ro
 

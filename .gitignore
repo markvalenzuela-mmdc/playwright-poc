@@ -12,6 +12,7 @@ node_modules/
 /allure-results-db/
 /allure-report-db/
 /.docker/postgres-data/
+repomix-output.xml
 
 .env
 !.env.example

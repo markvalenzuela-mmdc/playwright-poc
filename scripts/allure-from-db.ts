@@ -78,6 +78,23 @@ function toLabel(name: string, value: unknown) {
   return { name, value: String(value) };
 }
 
+function sanitizePathForReport(value: string | null | undefined): string {
+  if (!value) return 'unknown-file';
+
+  const normalized = value.replace(/\\/g, '/');
+  const testsIndex = normalized.lastIndexOf('/tests/');
+  if (testsIndex >= 0) return normalized.slice(testsIndex + 1);
+
+  return path.basename(normalized) || 'unknown-file';
+}
+
+function sanitizeStackForReport(value: string): string {
+  return value
+    .replace(/[A-Za-z]:[\\/][^\s)]+/g, '[local-path]')
+    .replace(/\/[^\s)]*\/playwright-poc\//g, '[workspace]/')
+    .replace(/\\[^\s)]*\\playwright-poc\\/g, '[workspace]\\');
+}
+
 function cleanAndCreateDirectory(dirPath: string) {
   fs.mkdirSync(dirPath, { recursive: true });
   for (const entry of fs.readdirSync(dirPath)) {
@@ -99,7 +116,7 @@ function deriveSuiteParts(fullTitle: string, filePath: string | null) {
     .map((piece) => piece.trim())
     .filter(Boolean);
 
-  const fileName = path.basename(filePath || '');
+  const fileName = sanitizePathForReport(filePath);
   const withoutFile = parts.filter((part) => part !== fileName);
   const subSuite = withoutFile.length > 1 ? withoutFile[withoutFile.length - 2] : null;
   return { fileName, subSuite };
@@ -154,9 +171,6 @@ async function main() {
         browser: testResults.browser,
         errorMessage: testResults.errorMessage,
         errorStack: testResults.errorStack,
-        tracePath: testResults.tracePath,
-        videoPath: testResults.videoPath,
-        screenshotPath: testResults.screenshotPath,
         startedAt: testResults.startedAt,
         finishedAt: testResults.finishedAt,
         runStatus: testRuns.status,
@@ -187,7 +201,7 @@ async function main() {
         toLabel('package', fileName || 'unknown-file'),
         toLabel('parentSuite', row.project || 'unknown-project'),
         toLabel('suite', fileName || 'unknown-suite'),
-        toLabel('host', process.env.COMPUTERNAME || 'db-import'),
+        toLabel('host', 'db-import'),
         toLabel('thread', `run-${row.runId}`),
       ];
 
@@ -206,13 +220,13 @@ async function main() {
 
       const statusDetails: { message?: string; trace?: string } = {};
       if (row.errorMessage) statusDetails.message = String(row.errorMessage);
-      if (row.errorStack) statusDetails.trace = String(row.errorStack);
+      if (row.errorStack) statusDetails.trace = sanitizeStackForReport(String(row.errorStack));
 
       const result = {
         uuid,
         historyId,
         testCaseId: historyId,
-        fullName: `${row.file || 'unknown-file'}::${row.fullTitle || row.title}::run=${row.runId}::started=${startedAtIso}`,
+        fullName: `${fileName}::${row.fullTitle || row.title}::run=${row.runId}::started=${startedAtIso}`,
         name: `${row.title} [${startedAtIso}]`,
         status,
         statusDetails,

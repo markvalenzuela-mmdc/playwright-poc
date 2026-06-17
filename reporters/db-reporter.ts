@@ -54,6 +54,29 @@ function pickAttachmentPath(result: TestResult, matcher: (name: string) => boole
   return match?.path ?? null;
 }
 
+function sanitizePath(value: string | null | undefined): string | null {
+  if (!value) return null;
+
+  const normalized = value.replace(/\\/g, '/');
+  const testsIndex = normalized.lastIndexOf('/tests/');
+  if (testsIndex >= 0) return normalized.slice(testsIndex + 1);
+
+  const testResultsIndex = normalized.lastIndexOf('/test-results/');
+  if (testResultsIndex >= 0) return normalized.slice(testResultsIndex + 1);
+
+  const fileName = normalized.split('/').filter(Boolean).at(-1);
+  return fileName ?? null;
+}
+
+function sanitizeStack(value: string | null | undefined): string | null {
+  if (!value) return null;
+
+  return value
+    .replace(/[A-Za-z]:[\\/][^\s)]+/g, '[local-path]')
+    .replace(/\/[^\s)]*\/playwright-poc\//g, '[workspace]/')
+    .replace(/\\[^\s)]*\\playwright-poc\\/g, '[workspace]\\');
+}
+
 export default class DbReporter implements Reporter {
   private readonly enabled: boolean;
   private readonly strict: boolean;
@@ -179,7 +202,7 @@ export default class DbReporter implements Reporter {
         branch: process.env.GITHUB_REF_NAME ?? process.env.BRANCH_NAME ?? null,
         commitSha: process.env.GITHUB_SHA ?? process.env.COMMIT_SHA ?? null,
         buildUrl: resolveBuildUrl(),
-        triggeredBy: process.env.GITHUB_ACTOR ?? process.env.USERNAME ?? process.env.USER ?? null,
+        triggeredBy: process.env.GITHUB_ACTOR ?? null,
         baseUrl: this.baseUrl,
       });
     } catch (error) {
@@ -213,7 +236,7 @@ export default class DbReporter implements Reporter {
         id: randomUUID(),
         runId: this.runId,
         project: projectName,
-        file: test.location.file,
+        file: sanitizePath(test.location.file),
         title: test.title,
         fullTitle: test.titlePath().join(' > '),
         tags,
@@ -223,10 +246,10 @@ export default class DbReporter implements Reporter {
         retry: result.retry,
         browser: browserName,
         errorMessage: result.error?.message ?? null,
-        errorStack: result.error?.stack ?? null,
-        tracePath,
-        videoPath,
-        screenshotPath,
+        errorStack: sanitizeStack(result.error?.stack),
+        tracePath: sanitizePath(tracePath),
+        videoPath: sanitizePath(videoPath),
+        screenshotPath: sanitizePath(screenshotPath),
         startedAt,
         finishedAt,
       });
