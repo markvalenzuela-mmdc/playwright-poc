@@ -1,0 +1,12 @@
+.env
+.docker/postgres-data/
+.git/
+node_modules/
+allure-results/
+allure-report/
+allure-results-db/
+allure-report-db/
+playwright-report/
+playwright-report-enrollmate/
+test-results/
+repomix-output.xml
