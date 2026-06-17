@@ -24,7 +24,7 @@ PW_DB_REPORTER_STRICT=false
 PW_RUN_ENV=local
 ```
 
-Control-plane monitoring is controlled by:
+Control-plane website testing is controlled by:
 
 ```bash
 TARGET_BASE_URL=https://www.mmdc.mcl.edu.ph/
@@ -49,10 +49,10 @@ pnpm run db:up
 pnpm run db:migrate
 ```
 
-3. Run monitoring tests with DB persistence:
+3. Run website tests with DB persistence:
 
 ```bash
-pnpm run test:monitoring:db
+pnpm run test:website:db
 ```
 
 4. Export DB runs and generate DB-based Allure report:
@@ -69,15 +69,15 @@ pnpm run allure:open:db
 
 ## Control Plane
 
-The control plane owns the monitoring cadence without host cron or GitHub Actions as the runtime scheduler.
+The control plane owns the website test cadence without host cron or GitHub Actions as the runtime scheduler.
 
 ```bash
 pnpm run control-plane
 ```
 
-On startup it applies DB migrations once, runs one monitoring cycle immediately, then waits `CONTROL_PLANE_INTERVAL_MS` after each completed cycle before starting the next one. Playwright test failures are still exported to Allure so the generated dashboard shows failed monitoring runs.
+On startup it applies DB migrations once, runs one website test cycle immediately, then waits `CONTROL_PLANE_INTERVAL_MS` after each completed cycle before starting the next one. Playwright test failures are still exported to Allure so the generated dashboard shows failed website runs.
 
-The website monitoring suite uses `playwright.website.config.ts`, which runs the DB reporter only and avoids generating Playwright HTML or direct Allure reporter artifacts on each scheduled run.
+The website suite uses `playwright.website.config.ts`, which runs the DB reporter only and avoids generating Playwright HTML or direct Allure reporter artifacts on each scheduled run.
 
 ## Dokploy / Coolify Deploy Shape
 

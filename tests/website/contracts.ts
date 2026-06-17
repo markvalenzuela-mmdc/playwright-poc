@@ -1,5 +1,3 @@
-import type { Page, Locator } from '@playwright/test';
-
 export type LocatorContract =
   | {
       kind: 'role';
@@ -83,22 +81,7 @@ export type FormContract = {
   submitMode: 'no-submit';
 };
 
-export function resolveLocator(page: Page | Locator, contract: LocatorContract): Locator {
-  if (contract.kind === 'css') {
-    return page.locator(contract.selector);
-  }
-
-  if (contract.kind === 'text') {
-    return page.getByText(contract.text, { exact: contract.exact });
-  }
-
-  return page.getByRole(contract.role, {
-    name: contract.name,
-    exact: contract.exact,
-  });
-}
-
-const PROGRAM_AND_CERTIFICATION_PATHS = [
+export const PROGRAM_AND_CERTIFICATION_PATHS = [
   '/certification-programs/',
   '/college-programs/',
   '/college-programs/ba-ai/',
@@ -118,7 +101,7 @@ const PROGRAM_AND_CERTIFICATION_PATHS = [
   '/certification-programs/virtual-assistance/',
 ] as const;
 
-const ADMISSIONS_PATHS = [
+export const ADMISSIONS_PATHS = [
   '/admissions/',
   '/admissions/asenso/',
   '/admissions/abanse-negrense-scholarship/',
@@ -131,7 +114,16 @@ const ADMISSIONS_PATHS = [
   '/admissions/financial-wellness-checker/',
 ] as const;
 
-const FINANCE_PATHS = ['/study-now-pay-later/', '/bukas/'] as const;
+export const FINANCE_PATHS = ['/study-now-pay-later/', '/bukas/'] as const;
+
+export const CRITICAL_PATH_CONTRACTS: CriticalPathContract[] = [
+  { path: '/', expectedTitlePattern: /MMDC|Map[uú]a|Malayan/i },
+  ...PROGRAM_AND_CERTIFICATION_PATHS.map((path) => ({ path })),
+  ...ADMISSIONS_PATHS.filter((path) => path !== '/admissions/financial-wellness-checker/').map((path) => ({ path })),
+  { path: '/study-now-pay-later/' },
+  { path: '/bukas/', expectedUrlPattern: /(mmdc\.mcl\.edu\.ph|bukas\.ph)/i },
+  { path: '/admissions/financial-wellness-checker/' },
+];
 
 const DEFAULT_REQUIRED_LOCATORS: LocatorContract[] = [
   { kind: 'css', selector: 'main' },
@@ -181,6 +173,12 @@ const CTA_EXPECTATION: CtaExpectation = {
   urlRegex: /(mmdc\.mcl\.edu\.ph|bukas\.ph)/i,
 };
 
+const GOOGLE_DRIVE_APPLICATION_PATHS = new Set([
+  '/admissions/next-gen/',
+  '/admissions/family-discount/',
+  '/admissions/ygc-ayala-discount/',
+]);
+
 export const PRIMARY_CTA_CONTRACTS: PrimaryCtaContract[] = [
   '/',
   ...PROGRAM_AND_CERTIFICATION_PATHS,
@@ -196,7 +194,12 @@ export const PRIMARY_CTA_CONTRACTS: PrimaryCtaContract[] = [
           // This page may route to partner or financing flows outside MMDC.
           urlRegex: /^https?:\/\/.+/i,
         }
-      : CTA_EXPECTATION,
+      : GOOGLE_DRIVE_APPLICATION_PATHS.has(path)
+        ? {
+            mode: 'urlRegex',
+            urlRegex: /drive\.google\.com\/file\/d\//i,
+          }
+        : CTA_EXPECTATION,
   allowPopup: true,
 }));
 
@@ -209,7 +212,7 @@ export const FORM_CONTRACTS: FormContract[] = [
       {
         name: 'fullName',
         locator: { kind: 'css', selector: 'input[name*="name" i], input[placeholder*="name" i]' },
-        value: 'Playwright Monitor',
+        value: 'Playwright Website',
       },
       {
         name: 'email',

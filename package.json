@@ -10,7 +10,7 @@
     "db:logs": "docker compose logs -f postgres",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/db-init.ts",
-    "test:monitoring:db": "playwright test --config=playwright.website.config.ts",
+    "test:website:db": "playwright test --config=playwright.website.config.ts",
     "test:enrollmate": "playwright test --config=playwright.enrollmate.config.ts",
     "report:enrollmate": "playwright show-report playwright-report-enrollmate",
     "report": "playwright show-report",

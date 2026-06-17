@@ -1,13 +1,13 @@
-# Playwright Monitoring Control Plane Plan
+# Playwright Website Control Plane Plan
 
 ## 1) Objective
 
-Build a Docker-deployable Playwright monitoring POC that owns its own execution cadence without GitHub Actions, host cron, or a scheduler container.
+Build a Docker-deployable Playwright website POC that owns its own execution cadence without GitHub Actions, host cron, or a scheduler container.
 
 The repo already has the core pipeline:
 
 ```txt
-Playwright monitoring tests
+Playwright website tests
   -> custom DB reporter
   -> PostgreSQL run/result tables
   -> DB-to-Allure exporter
@@ -25,7 +25,7 @@ The next step is a long-running Node/TypeScript control-plane worker that repeat
 - Interval: `CONTROL_PLANE_INTERVAL_MS`, minimum `60000`, default `900000`.
 - Migration behavior: run `pnpm run db:migrate` once at startup; exit non-zero if it fails.
 - Cycle failure behavior: log failures and continue to the next fixed-delay cycle.
-- Test failure behavior: still generate/export the Allure report, because failed tests are monitoring data.
+- Test failure behavior: still generate/export the Allure report, because failed tests are website run data.
 - Report scope: export all DB runs, forever; no retention or deletion in this POC.
 - Report publishing: direct `allure generate --clean` into the report directory is acceptable for the POC.
 - Report serving: only the report UI service exposes a routeable container port for Dokploy/Coolify.
@@ -42,9 +42,9 @@ Dokploy / Coolify Compose app
 ├─ control-plane worker
 │  ├─ loads env
 │  ├─ runs DB migration once
-│  ├─ runs one monitoring cycle immediately
+│  ├─ runs one website cycle immediately
 │  ├─ waits fixed delay after each cycle completes
-│  ├─ runs DB-only Playwright monitoring suite
+│  ├─ runs DB-only Playwright website suite
 │  ├─ exports all DB runs to Allure result JSON
 │  └─ generates static Allure report
 │
@@ -61,8 +61,8 @@ Dokploy / Coolify Compose app
 ### In Scope
 
 - Add `scripts/control-plane.ts`.
-- Add a dedicated DB-only Playwright monitoring config.
-- Update `test:monitoring:db` to use the dedicated monitoring config.
+- Add a dedicated DB-only Playwright website config.
+- Update `test:website:db` to use the dedicated website config.
 - Split DB Allure scripts into reusable all-runs steps.
 - Add `control-plane` package script.
 - Add `Dockerfile` for the control-plane image.
@@ -94,7 +94,7 @@ Responsibilities:
 - Run `pnpm run db:migrate` once at startup.
 - Run the first cycle immediately.
 - Use a fixed-delay loop: wait only after a cycle completes.
-- Run `pnpm run test:monitoring:db`.
+- Run `pnpm run test:website:db`.
 - Run DB Allure export/generation even if the Playwright command exits non-zero.
 - Log each cycle start, finish, and failure.
 - Continue after per-cycle failures.
@@ -106,7 +106,7 @@ Important behavior:
 - Test assertion failure is not fatal to the worker.
 - Allure export/generation failure is logged, then the worker continues after the interval.
 
-### Dedicated Monitoring Playwright Config
+### Dedicated Website Playwright Config
 
 Add a config such as `playwright.website.config.ts`.
 
@@ -114,9 +114,9 @@ Configuration intent:
 
 - Test directory: `./tests`.
 - Spec selection lives in the config, not in `package.json`.
-- Include the current monitoring specs:
-  - `tests/homepage.monitor.spec.ts`
-  - `tests/critical-paths.monitor.spec.ts`
+- Include the current website specs:
+  - `tests/website/homepage.website.spec.ts`
+  - `tests/website/critical-paths.website.spec.ts`
 - Reporter list: `line` plus `./reporters/db-reporter.ts` only.
 - Base URL: `process.env.TARGET_BASE_URL ?? 'https://www.mmdc.mcl.edu.ph/'`.
 - Retries: `0`.
@@ -131,7 +131,7 @@ Update scripts to keep existing behavior but make steps reusable:
 
 ```json
 {
-  "test:monitoring:db": "playwright test --config=playwright.website.config.ts",
+  "test:website:db": "playwright test --config=playwright.website.config.ts",
   "allure:from-db": "tsx scripts/allure-from-db.ts",
   "allure:generate:db": "node scripts/allure.cjs generate ./allure-results-db -o ./allure-report-db --clean",
   "allure:db": "pnpm run allure:from-db && pnpm run allure:generate:db",
@@ -243,10 +243,10 @@ Run migrations:
 pnpm run db:migrate
 ```
 
-Run the DB-only monitoring suite:
+Run the DB-only website suite:
 
 ```bash
-pnpm run test:monitoring:db
+pnpm run test:website:db
 ```
 
 Generate the DB-backed Allure report:
@@ -263,8 +263,8 @@ pnpm run control-plane
 
 Expected results:
 
-- `test_runs` receives a new row per monitoring cycle.
-- `test_results` receives rows for each monitoring test result.
+- `test_runs` receives a new row per website cycle.
+- `test_results` receives rows for each website test result.
 - `allure-results-db/` is regenerated from all DB runs.
 - `allure-report-db/` is regenerated from DB-exported Allure results.
 - A failed Playwright test still results in report generation.
@@ -305,10 +305,10 @@ LIMIT 20;
 
 - `PLAN.MD` and README no longer describe cron as the target scheduler for this POC path.
 - `DATABASE_URL` is the only documented DB connection string for the app/reporting path.
-- `pnpm run test:monitoring:db` runs the dedicated DB-only monitoring config.
+- `pnpm run test:website:db` runs the dedicated DB-only website config.
 - `pnpm run allure:db` exports all DB runs and regenerates the DB-backed Allure report.
 - `pnpm run control-plane` runs migration once, runs a cycle immediately, then repeats on fixed delay.
-- A failed Playwright monitoring command does not prevent DB Allure export/generation from being attempted.
+- A failed Playwright website command does not prevent DB Allure export/generation from being attempted.
 - `docker-compose.deploy.yml` uses external Postgres and does not define a Postgres container.
 - `docker-compose.deploy.yml` uses named volumes for generated report data.
 - Only the report UI service exposes a routeable port.

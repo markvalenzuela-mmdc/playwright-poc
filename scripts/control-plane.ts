@@ -101,12 +101,12 @@ async function runCycle() {
   console.log(`[control-plane] Cycle started at ${startedAt.toISOString()}`);
 
   try {
-    const testExitCode = await runCommand('pnpm', ['run', 'test:monitoring:db'], {
+    const testExitCode = await runCommand('pnpm', ['run', 'test:website:db'], {
       allowFailure: true,
     });
 
     if (testExitCode !== 0) {
-      console.error(`[control-plane] Monitoring tests exited with code ${testExitCode}.`);
+      console.error(`[control-plane] Website tests exited with code ${testExitCode}.`);
     }
 
     await runCommand('pnpm', ['run', 'allure:db']);

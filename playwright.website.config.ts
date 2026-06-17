@@ -10,7 +10,7 @@ try {
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: ['homepage.monitor.spec.ts', 'critical-paths.monitor.spec.ts'],
+  testMatch: ['**/website/*.website.spec.ts'],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,
@@ -36,7 +36,7 @@ export default defineConfig({
   },
   projects: [
     {
-      name: 'chromium-core',
+      name: 'website',
       use: { ...devices['Desktop Chrome'] },
       grep: /@core/,
     },
